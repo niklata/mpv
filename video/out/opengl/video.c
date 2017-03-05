@@ -1313,7 +1313,7 @@ static void reinit_scaler(struct gl_video *p, struct scaler *scaler,
         scaler->kernel->w.taper = conf->window.taper;
 
     if (scaler->kernel->f.resizable && conf->radius > 0.0)
-        scaler->kernel->f.radius = conf->radius;
+        scaler->kernel->f.dst_radius = conf->radius;
 
     scaler->kernel->clamp = conf->clamp;
 
@@ -3400,7 +3400,10 @@ void gl_video_configure_queue(struct gl_video *p, struct vo *vo)
         const struct filter_kernel *kernel =
             mp_find_filter_kernel(p->opts.scaler[SCALER_TSCALE].kernel.name);
         if (kernel) {
-            double radius = kernel->f.radius;
+            // f.src_radius is not populated here, so we must use dst_radius.
+            // This choice is not correct if we were downsampling to lower FPS
+            // directly without decimation, but we should always be upsampling.
+            double radius = kernel->f.dst_radius;
             radius = radius > 0 ? radius : p->opts.scaler[SCALER_TSCALE].radius;
             queue_size += 1 + ceil(radius);
         } else {

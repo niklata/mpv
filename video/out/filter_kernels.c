@@ -58,21 +58,21 @@ const struct filter_kernel *mp_find_filter_kernel(const char *name)
 bool mp_init_filter(struct filter_kernel *filter, const int *sizes,
                     double inv_scale)
 {
-    assert(filter->f.radius > 0);
+    assert(filter->f.dst_radius > 0);
     // Only downscaling requires widening the filter
-    filter->inv_scale = inv_scale >= 1.0 ? inv_scale : 1.0;
-    filter->f.radius *= filter->inv_scale;
+    inv_scale = inv_scale >= 1.0 ? inv_scale : 1.0;
+    filter->f.src_radius = filter->f.dst_radius * inv_scale;
     // Polar filters are dependent solely on the radius
     if (filter->polar) {
         filter->size = 1;
         // Safety precaution to avoid generating a gigantic shader
-        if (filter->f.radius > 16.0) {
-            filter->f.radius = 16.0;
+        if (filter->f.src_radius > 16.0) {
+            filter->f.src_radius = 16.0;
             return false;
         }
         return true;
     }
-    int size = ceil(2.0 * filter->f.radius);
+    int size = ceil(2.0 * filter->f.src_radius);
     // round up to smallest available size that's still large enough
     if (size < sizes[0])
         size = sizes[0];
@@ -87,7 +87,6 @@ bool mp_init_filter(struct filter_kernel *filter, const int *sizes,
         // largest filter available. This is incorrect, but better than refusing
         // to do anything.
         filter->size = cursize[-1];
-        filter->inv_scale *= (filter->size/2.0) / filter->f.radius;
         return false;
     }
 }
@@ -105,7 +104,7 @@ static double sample_window(struct filter_window *kernel, double x)
     x = kernel->blur > 0.0 ? x / kernel->blur : x;
     x = x <= kernel->taper ? 0.0 : (x - kernel->taper) / (1 - kernel->taper);
 
-    if (x < kernel->radius)
+    if (x < kernel->dst_radius)
         return kernel->weight(kernel, x);
     return 0.0;
 }
@@ -114,8 +113,8 @@ static double sample_window(struct filter_window *kernel, double x)
 static double sample_filter(struct filter_kernel *filter, double x)
 {
     // The window is always stretched to the entire kernel
-    double w = sample_window(&filter->w, x / filter->f.radius * filter->w.radius);
-    double k = sample_window(&filter->f, x / filter->inv_scale);
+    double w = sample_window(&filter->w, x / filter->f.dst_radius * filter->w.dst_radius);
+    double k = sample_window(&filter->f, x);
     return filter->clamp ? fmax(0.0, fmin(1.0, w * k)) : w * k;
 }
 
@@ -152,7 +151,7 @@ void mp_compute_lut(struct filter_kernel *filter, int count, float *out_array)
     if (filter->polar) {
         // Compute a 1D array indexed by radius
         for (int x = 0; x < count; x++) {
-            double r = x * filter->f.radius / (count - 1);
+            double r = x * filter->f.dst_radius / (count - 1);
             out_array[x] = sample_filter(filter, r);
         }
     } else {
@@ -175,7 +174,7 @@ static double box(params *p, double x)
 
 static double triangle(params *p, double x)
 {
-    return fmax(0.0, 1.0 - fabs(x / p->radius));
+    return fmax(0.0, 1.0 - fabs(x / p->dst_radius));
 }
 
 static double hanning(params *p, double x)

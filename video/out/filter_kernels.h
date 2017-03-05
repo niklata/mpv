@@ -16,13 +16,18 @@
 
 struct filter_window {
     const char *name;
-    double radius; // Preferred radius, should only be changed if resizable
+    double dst_radius; // Radius in destination coordinate system.  This value
+                       // is equal to src_radius when not downsampling, and it
+                       // is always the width of the underlying filter function.
     double (*weight)(struct filter_window *k, double x);
     bool resizable; // Filter supports any given radius
     double params[2]; // User-defined custom filter parameters. Not used by
                       // all filters
     double blur; // Blur coefficient (sharpens or widens the filter)
     double taper; // Taper coefficient (flattens the filter's center)
+    double src_radius; // Radius in the source coordinate system.  This value
+                       // is used for determining which samples in the source
+                       // should be used as input for the resampler.
 };
 
 struct filter_kernel {
@@ -34,7 +39,6 @@ struct filter_kernel {
     bool polar;         // whether or not the filter uses polar coordinates
     // The following values are set by mp_init_filter() at runtime.
     int size;           // number of coefficients (may depend on radius)
-    double inv_scale;   // scale factor (<1.0 is upscale, >1.0 downscale)
 };
 
 extern const struct filter_window mp_filter_windows[];
